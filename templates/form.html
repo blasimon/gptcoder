@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GPT Coder</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <style>
+    .tooltip-icon {
+      cursor: help;
+      color: #0d6efd;
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body class="p-4">
+
+  <div class="container">
+    <h2 class="mb-4">GPT Coder</h2>
+
+    <div id="error-box" class="alert alert-danger" style="display: none;"></div>
+
+    <div class="accordion mt-5" id="aboutAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="headingAbout">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAbout">
+            About This App
+          </button>
+        </h2>
+        <div id="collapseAbout" class="accordion-collapse collapse" data-bs-parent="#aboutAccordion">
+          <div class="accordion-body">
+            <p>This app allows you to upload a CSV file and code its contents using OpenAI's GPT models. All GPT queries are sent using your own API key and processed one row at a time in memory.</p>
+            <p><strong>No uploaded files or responses are saved to disk</strong>, and no data is logged or stored on the server. All processing occurs in memory, and the response is streamed back to your browser only. Still, we do not recommend you upload PII or sensitive data.</p>
+            <p>For API key guidance and ethical use recommendations, visit <a href="https://questionableresearch.ai" target="_blank">questionableresearch.ai</a>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br><br>
+
+    <form method="POST" enctype="multipart/form-data" onsubmit="submitCSV(event)">
+      <div class="mb-3">
+        <label class="form-label">
+          OpenAI API Key
+          <span class="tooltip-icon" data-bs-toggle="tooltip" title="Paste your OpenAI API key. Visit questionableresearch.ai for instructions.">ℹ️</span>
+        </label>
+        <input type="password" class="form-control" name="api_key" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">
+          Prompt Template
+          <span class="tooltip-icon" data-bs-toggle="tooltip" title="Describe how GPT should code each cell (e.g., sentiment, summary)">ℹ️</span>
+        </label>
+        <textarea class="form-control" name="instructions" rows="4" required>
+You are a helpful assistant. Summarize the following review in one sentence:
+
+Review:</textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">
+          Upload CSV
+          <span class="tooltip-icon" data-bs-toggle="tooltip" title="Upload a .csv file only. Excel files are not supported. Do not upload proprietary data.">ℹ️</span>
+        </label>
+        <input type="file" class="form-control" id="csv-file" name="file" accept=".csv" required>
+      </div>
+
+	<div class="mb-3">
+	  <label class="form-label">
+	    Select Column to Code
+	    <span class="tooltip-icon" data-bs-toggle="tooltip" title="Choose which column in 	your CSV should be passed to GPT.">ℹ️</span>
+	  </label>
+	  <select class="form-select" id="column-select" name="column_to_code" required></select>
+</div>
+
+      <div class="mb-3">
+        <label class="form-label">
+          Model
+          <span class="tooltip-icon" data-bs-toggle="tooltip" title="Select the GPT variant. Check OpenAI.com for available models.">ℹ️</span>
+        </label>
+        <select class="form-select" name="model">
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4">gpt-4</option>
+          <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">
+          Temperature (0–2)
+          <span class="tooltip-icon" data-bs-toggle="tooltip" title="Controls creativity/randomness. 0 = deterministic, 2 = very creative. Default is 0.7.">ℹ️</span>
+        </label>
+        <input type="number" class="form-control" name="temperature" value="0.7" step="0.1" min="0" max="2">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">
+          Max Tokens
+          <span class="tooltip-icon" data-bs-toggle="tooltip" title="Number of tokens GPT can output. Rule of thumb: ~0.75 words per token.">ℹ️</span>
+        </label>
+        <input type="number" class="form-control" name="max_tokens" value="100" min="1">
+      </div>
+
+      <div id="progress-section" class="mb-3" style="display:none;">
+        <label class="form-label">Progress</label>
+        <div class="progress">
+          <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
+        </div>
+      </div>
+
+      <button type="submit" id="submit-button" class="btn btn-primary">Process File</button><br>
+      <a id="download-button" class="btn btn-success mt-3" style="display: none;">Download Coded File</a>
+    </form>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script>
+    function showError(message) {
+      const errorBox = document.getElementById("error-box");
+      errorBox.innerText = message;
+      errorBox.style.display = "block";
+    }
+
+document.getElementById("csv-file").addEventListener("change", function () {
+  const file = this.files[0];
+  if (!file) return;
+
+  Papa.parse(file, {
+    header: true,
+    preview: 1,
+    complete: function(preview) {
+      const columns = Object.keys(preview.data[0] || {});
+      const selector = document.getElementById("column-select");
+      selector.innerHTML = "";
+      columns.forEach(col => {
+        const option = document.createElement("option");
+        option.value = col;
+        option.text = col;
+        selector.appendChild(option);
+      });
+    }
+  });
+});
+
+    function submitCSV(event) {
+      event.preventDefault();
+
+      const fileInput = document.querySelector('input[name="file"]');
+      const file = fileInput.files[0];
+      if (!file) return showError("Please upload a file.");
+
+      const apiKey = document.querySelector('input[name="api_key"]').value;
+      const model = document.querySelector('select[name="model"]').value;
+      const temp = parseFloat(document.querySelector('input[name="temperature"]').value);
+      const maxTokens = parseInt(document.querySelector('input[name="max_tokens"]').value);
+      const instructions = document.querySelector('textarea[name="instructions"]').value;
+
+      const button = document.getElementById('submit-button');
+      const progressSection = document.getElementById('progress-section');
+      const progressBar = document.getElementById('progress-bar');
+      const errorBox = document.getElementById("error-box");
+
+      button.disabled = true;
+      errorBox.style.display = "none";
+      progressSection.style.display = "block";
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async function(results) {
+          const data = results.data;
+          const total = data.length;
+          const output = [];
+
+          if (total > 3001) {
+            showError("Too many rows. Please upload a file with 3000 rows or fewer.");
+            button.disabled = false;
+            return;
+          }
+
+          for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            const selectedColumn = document.getElementById("column-select").value;
+	    const prompt = `${instructions}\n${row[selectedColumn]}`;
+            try {
+              const res = await fetch("/code", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  prompt: prompt,
+                  model: model,
+                  temperature: temp,
+                  max_tokens: maxTokens,
+                  api_key: apiKey
+                })
+              });
+              const json = await res.json();
+              row["GPT_Response"] = json.response || json.error || "Error: No response";
+            } catch (err) {
+              row["GPT_Response"] = "Error: " + err.message;
+            }
+            output.push(row);
+            const percent = Math.round(((i + 1) / total) * 100);
+            progressBar.style.width = percent + "%";
+            progressBar.innerText = percent + "%";
+          }
+
+          const csv = Papa.unparse(output);
+          const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const downloadBtn = document.getElementById("download-button");
+          downloadBtn.href = url;
+          downloadBtn.download = "coded_output.csv";
+          downloadBtn.style.display = "inline-block";
+
+          button.disabled = false;
+          progressBar.classList.add("bg-success");
+        }
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.map(t => new bootstrap.Tooltip(t));
+    });
+  </script>
+
+  <footer class="mt-5 border-top pt-3 text-muted">
+    <p>Created by Simon Blanchard. For questions, contact <a href="mailto:simon.blanchard@georgetown.edu">simon.blanchard@georgetown.edu</a>.</p>
+  </footer>
+
+</body>
+</html>
