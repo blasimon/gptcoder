@@ -16,7 +16,13 @@
 <body class="p-4">
 
   <div class="container">
-    <h2 class="mb-4">GPT Coder</h2>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">GPT Coder</h2>
+  <a href="https://github.com/blasimon/gptcoder" target="_blank" title="View on GitHub">
+    <img src="https://cdn.jsdelivr.net/npm/simple-icons@v10/icons/github.svg" alt="GitHub" width="28" height="28">
+  </a>
+</div>
 
     <div id="error-box" class="alert alert-danger" style="display: none;"></div>
 
@@ -31,6 +37,7 @@
           <div class="accordion-body">
             <p>This app allows you to upload a CSV file and code its contents using OpenAI's GPT models. All GPT queries are sent using your own API key and processed one row at a time in memory.</p>
             <p><strong>No uploaded files or responses are saved to disk</strong>, and no data is logged or stored on the server. All processing occurs in memory, and the response is streamed back to your browser only. Still, we do not recommend you upload PII or sensitive data.</p>
+<p>This project is fully open source and available on <a href="https://github.com/blasimon/gptcoder" target="_blank">GitHub</a>. You are welcome to clone it, customize the prompt, UI, or logic for your own research or instructional use.</p>
             <p>For API key guidance and ethical use recommendations, visit <a href="https://questionableresearch.ai" target="_blank">questionableresearch.ai</a>.</p>
           </div>
         </div>
